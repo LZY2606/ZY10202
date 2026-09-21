@@ -34,3 +34,8 @@ coverage/
 .vite/
 .turbo/
 *.tsbuildinfo
+
+# 刃缘解像台运行期文件
+edge_bench.db
+edge_bench.db-shm
+edge_bench.db-wal

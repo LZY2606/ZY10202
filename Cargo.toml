@@ -1,0 +1,22 @@
+[package]
+name = "edge_mtf_bench"
+version = "0.1.0"
+edition = "2021"
+description = "刃缘解像台 - slanted-edge ESF/LSF/MTF analysis bench"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+
+[[bin]]
+name = "edge_mtf_bench"
+path = "src/main.rs"
+
+[profile.release]
+lto = false

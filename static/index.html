@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>刃缘解像台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>刃缘解像台</h1>
+  <div class="sub">倾斜刃边 ESF → LSF → MTF 全证据分析 · 像素中心半像素约定 · cycles/pixel 与 lp/mm 口径分离</div>
+  <div class="actions">
+    <button id="btn-export">导出运行记录</button>
+    <label class="btnlike">导入复核<input id="file-import" type="file" accept="application/json,.json" hidden></label>
+    <button id="btn-clear" class="danger">清空数据库</button>
+    <button id="btn-reseed">重新植入 fixture</button>
+  </div>
+</header>
+
+<main>
+  <section id="left">
+    <h2>1 · 图像与 ROI</h2>
+    <div class="row">
+      <label>固定 fixture
+        <select id="image-select"></select>
+      </label>
+      <button id="btn-refresh">刷新方案</button>
+    </div>
+    <div id="image-meta" class="meta"></div>
+    <div class="canvas-wrap">
+      <canvas id="image-canvas" width="360" height="300"></canvas>
+      <canvas id="roi-canvas" width="360" height="300" style="position:absolute;inset:0"></canvas>
+    </div>
+    <div class="hint">在图上拖框绘制 ROI；旋转/裁切只置换像素索引，不做重采样。</div>
+
+    <h2>2 · 分析方案参数</h2>
+    <div class="grid2">
+      <label>x0<input id="p-x0" type="number" value="0" min="0"></label>
+      <label>y0<input id="p-y0" type="number" value="0" min="0"></label>
+      <label>宽 w<input id="p-w" type="number" value="0" min="1"></label>
+      <label>高 h<input id="p-h" type="number" value="0" min="1"></label>
+      <label>ROI 旋转
+        <select id="p-rot">
+          <option value="0">0°</option>
+          <option value="90">90° 顺时针</option>
+          <option value="180">180°</option>
+          <option value="270">270° 顺时针</option>
+        </select>
+      </label>
+      <label>超采样 k
+        <select id="p-ss">
+          <option>1</option><option>2</option><option selected>4</option>
+          <option>8</option><option>16</option>
+        </select>
+      </label>
+      <label>微分窗
+        <select id="p-deriv">
+          <option value="central_3">中心差分 (3 点)</option>
+          <option value="five_point" selected>5 点</option>
+          <option value="seven_point">7 点</option>
+        </select>
+      </label>
+      <label>频谱窗
+        <select id="p-window">
+          <option value="hann" selected>Hann 窗</option>
+          <option value="rectangular">矩形窗（保留旁瓣）</option>
+        </select>
+      </label>
+      <label>窗半宽(箱)<input id="p-half" type="number" value="64" min="8" max="512"></label>
+      <label>像素间距
+        <select id="p-pitchmode">
+          <option value="auto" selected>自动（按分段）</option>
+          <option value="manual">手工指定</option>
+          <option value="ignore">忽略（只 c/p）</option>
+        </select>
+      </label>
+      <label id="manual-pitch-wrap" class="hidden">手工 pitch (µm)
+        <input id="p-pitch" type="number" step="0.01" min="0.01" value="5.0">
+      </label>
+    </div>
+    <div>
+      <label class="block">排除污点行（局部行号，逗号分隔）
+        <input id="p-exclude" type="text" placeholder="例如 13,47,48,60">
+      </label>
+    </div>
+    <div class="row">
+      <label>方案名<input id="run-label" type="text" placeholder="例如 ss4-5点-去坏行"></label>
+      <button id="btn-analyze" class="primary">运行分析</button>
+    </div>
+    <div id="param-error" class="error"></div>
+
+    <h2>3 · 同图方案（按参数指纹区分）</h2>
+    <table id="runs-table">
+      <thead><tr><th>#</th><th>方案</th><th>参数指纹</th><th>MTF50</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="right">
+    <h2>4 · 结果与证据链</h2>
+    <div id="summary" class="cards"></div>
+
+    <div class="freqtoggle">
+      频率单位：
+      <label><input type="radio" name="funit" value="cpp" checked> cycles/pixel</label>
+      <label id="funit-lpmm-wrap" class="hidden"><input type="radio" name="funit" value="lpmm"> lp/mm</label>
+      <span id="funit-note" class="hint"></span>
+    </div>
+
+    <div class="chart-block">
+      <h3>MTF</h3>
+      <canvas id="chart-mtf" width="720" height="240"></canvas>
+      <div id="mtf-crossings" class="hint"></div>
+    </div>
+    <div class="chart-block">
+      <h3>LSF（空箱留缺口，不复制邻箱）</h3>
+      <canvas id="chart-lsf" width="720" height="200"></canvas>
+    </div>
+    <div class="chart-block">
+      <h3>超采样 ESF（每箱样本数见色深/标注）</h3>
+      <canvas id="chart-esf" width="720" height="200"></canvas>
+      <div class="legend"><span class="sw sample"></span>有样本箱　<span class="sw empty"></span>空箱(null)</div>
+    </div>
+
+    <h3>边缘拟合与逐行证据</h3>
+    <div id="fit-info" class="meta"></div>
+    <div class="table-scroll">
+      <table id="rows-table">
+        <thead><tr><th>局部行</th><th>检测边缘(中心坐标)</th><th>低</th><th>高</th><th>对比度</th><th>残差(px)</th><th>状态</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h3>逐像素证据（旋转/裁切后仍为整数+0.5）</h3>
+    <div class="table-scroll">
+      <table id="pixels-table">
+        <thead><tr><th>局部(u,v)</th><th>原图(x,y)</th><th>中心(x,y)</th><th>码值</th><th>有符号法向距离(px)</th><th>ESF箱</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <details>
+    <summary>运行日志（可导出，清空库后可重新导入复核）</summary>
+    <table id="log-table"><thead><tr><th>时间</th><th>动作</th><th>详情</th></tr></thead><tbody></tbody></table>
+  </details>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
